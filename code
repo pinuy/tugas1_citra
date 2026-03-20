@@ -1,0 +1,168 @@
+import cv2
+import numpy as np
+from tkinter import *
+from tkinter import filedialog, simpledialog
+from PIL import Image, ImageTk
+import matplotlib.pyplot as plt
+
+# =========================
+# HISTOGRAM MANUAL
+# =========================
+def manual_histogram(img):
+    hist = np.zeros(256)
+
+    for i in range(img.shape[0]):
+        for j in range(img.shape[1]):
+            intensity = img[i, j]
+            hist[intensity] += 1
+
+    return hist
+
+# =========================
+# OPERASI CITRA
+# =========================
+def brightness(img, beta):
+    return np.clip(img + beta, 0, 255).astype(np.uint8)
+
+def negative(img):
+    return 255 - img
+
+def log_transform(img, c=1):
+    img = img.astype(float)
+    result = c * np.log(1 + img)
+    return np.array(result / np.max(result) * 255, dtype=np.uint8)
+
+def power_transform(img, gamma=1.0):
+    img = img / 255.0
+    result = np.power(img, gamma)
+    return np.array(result * 255, dtype=np.uint8)
+
+def contrast_stretching(img):
+    r_min = np.min(img)
+    r_max = np.max(img)
+
+    result = (img - r_min) * (255 / (r_max - r_min))
+    return result.astype(np.uint8)
+
+# =========================
+# HISTOGRAM EQUALIZATION
+# =========================
+def histogram_equalization(img):
+    hist = manual_histogram(img)
+    cdf = hist.cumsum()
+    cdf_normalized = cdf * 255 / cdf[-1]
+
+    result = np.zeros_like(img)
+
+    for i in range(img.shape[0]):
+        for j in range(img.shape[1]):
+            result[i, j] = cdf_normalized[img[i, j]]
+
+    return result.astype(np.uint8)
+
+# =========================
+# HISTOGRAM MATCHING
+# =========================
+def histogram_matching(source, reference):
+    src_hist = manual_histogram(source)
+    ref_hist = manual_histogram(reference)
+
+    src_cdf = np.cumsum(src_hist) / np.sum(src_hist)
+    ref_cdf = np.cumsum(ref_hist) / np.sum(ref_hist)
+
+    mapping = np.zeros(256)
+
+    for i in range(256):
+        diff = np.abs(ref_cdf - src_cdf[i])
+        mapping[i] = np.argmin(diff)
+
+    result = np.zeros_like(source)
+
+    for i in range(source.shape[0]):
+        for j in range(source.shape[1]):
+            result[i, j] = mapping[source[i, j]]
+
+    return result.astype(np.uint8)
+
+# =========================
+# GUI
+# =========================
+class ImageApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Image Processing GUI")
+        self.img = None
+
+        menu = Menu(root)
+        root.config(menu=menu)
+
+        # FILE MENU
+        file_menu = Menu(menu)
+        menu.add_cascade(label="File", menu=file_menu)
+        file_menu.add_command(label="Open Image", command=self.load_image)
+
+        # PROCESS MENU
+        process_menu = Menu(menu)
+        menu.add_cascade(label="Process", menu=process_menu)
+
+        process_menu.add_command(label="Show Histogram", command=self.show_histogram)
+        process_menu.add_command(label="Brightness", command=self.apply_brightness)
+        process_menu.add_command(label="Negative", command=self.apply_negative)
+        process_menu.add_command(label="Log Transform", command=self.apply_log)
+        process_menu.add_command(label="Power Transform", command=self.apply_power)
+        process_menu.add_command(label="Contrast Stretching", command=self.apply_contrast)
+        process_menu.add_command(label="Histogram Equalization", command=self.apply_equalization)
+        process_menu.add_command(label="Histogram Matching", command=self.apply_matching)
+
+    # =========================
+    def load_image(self):
+        path = filedialog.askopenfilename()
+        self.img = cv2.imread(path, 0)  # grayscale
+        cv2.imshow("Input Image", self.img)
+
+    def show_histogram(self):
+        hist = manual_histogram(self.img)
+        plt.plot(hist)
+        plt.title("Histogram")
+        plt.show()
+
+    def apply_brightness(self):
+        beta = simpledialog.askinteger("Input", "Masukkan nilai brightness (-100 s/d 100):")
+        result = brightness(self.img, beta)
+        cv2.imshow("Brightness", result)
+
+    def apply_negative(self):
+        result = negative(self.img)
+        cv2.imshow("Negative", result)
+
+    def apply_log(self):
+        c = simpledialog.askfloat("Input", "Masukkan nilai c:")
+        result = log_transform(self.img, c)
+        cv2.imshow("Log Transform", result)
+
+    def apply_power(self):
+        gamma = simpledialog.askfloat("Input", "Masukkan nilai gamma:")
+        result = power_transform(self.img, gamma)
+        cv2.imshow("Power Transform", result)
+
+    def apply_contrast(self):
+        result = contrast_stretching(self.img)
+        cv2.imshow("Contrast Stretching", result)
+
+    def apply_equalization(self):
+        result = histogram_equalization(self.img)
+        cv2.imshow("Histogram Equalization", result)
+
+    def apply_matching(self):
+        ref_path = filedialog.askopenfilename(title="Pilih gambar referensi")
+        ref_img = cv2.imread(ref_path, 0)
+
+        result = histogram_matching(self.img, ref_img)
+        cv2.imshow("Histogram Matching", result)
+
+# =========================
+# MAIN
+# =========================
+root = Tk()
+app = ImageApp(root)
+root.mainloop()
